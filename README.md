@@ -1,5 +1,5 @@
 
-# LEAF-FHE: Benchmark para Cenários Federados com Criptografia Homomórfica
+# HE-LEAF: Benchmark para Cenários Federados com Criptografia Homomórfica
 
 Este repositório é uma versão do benchmark **LEAF** que incorpora criptografia homomórfica utilizando a biblioteca **Pyfhel**, proporcionando privacidade aprimorada em cenários de aprendizado federado.
 
@@ -41,22 +41,45 @@ Este repositório é uma versão do benchmark **LEAF** que incorpora criptografi
    - 1,660,820 usuários, 56,587,343 comentários
    - Tarefa: Predição da próxima palavra
 
+
 ## Instalação e Requisitos
 
-É necessário criar um ambiente virtual com Python 3.6:
+⚠️ **Atenção:**  
+Devido a problemas de incompatibilidade e indisponibilidade do Python 3.6 nos repositórios oficiais das versões mais recentes do Ubuntu (como 24.04 "Noble"), **recomenda-se fortemente** utilizar o [Miniconda](https://docs.conda.io/en/latest/miniconda.html) ou [Anaconda](https://www.anaconda.com/) para criar um ambiente virtual com Python 3.6.
+
+### Passos para criar o ambiente com Conda:
+
+1. **Instale o Miniconda** (caso ainda não tenha):
 
 ```bash
-python3.6 -m venv leaf_env
-source leaf_env/bin/activate
-pip install --upgrade pip
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+bash Miniconda3-latest-Linux-x86_64.sh
+# Siga as instruções na tela e, ao final, reinicie seu terminal ou rode:
+source ~/.bashrc
 ```
 
-Em seguida, instale as dependências necessárias:
+2. **Crie e ative o ambiente com Python 3.6**:
 
 ```bash
+conda create -n leaf_env python=3.6
+conda activate leaf_env
+```
+
+
+
+3. **Atualize o pip e instale as dependências necessárias**:
+
+```bash
+pip install --upgrade pip
 pip install numpy==1.16.4 scipy==1.2.1 tensorflow==1.13.1 Pillow==6.2.1 matplotlib==3.0.3 jupyter==1.0.0 pandas==0.24.2 grpcio==1.16.1 protobuf==3.19.6 pyfhel
 ```
 
 - Certifique-se de que `wget` está instalado e funcionando (especialmente em macOS).
 - Para gerar os conjuntos de dados específicos, consulte as instruções dentro das respectivas pastas.
 - A pasta `models` contém instruções para executar as implementações básicas de referência com a adição da criptografia homomórfica.
+
+
+**Apagar ambiente (Se for necessario)**:
+```bash
+conda env remove -n leaf-env
+```
