@@ -1,52 +1,62 @@
-# LEAF: A Benchmark for Federated Settings
 
-## Resources
+# LEAF-FHE: Benchmark para Cenários Federados com Criptografia Homomórfica
 
-  * **Homepage:** [leaf.cmu.edu](https://leaf.cmu.edu)
-  * **Paper:** ["LEAF: A Benchmark for Federated Settings"](https://arxiv.org/abs/1812.01097)
+Este repositório é uma versão do benchmark **LEAF** que incorpora criptografia homomórfica utilizando a biblioteca **Pyfhel**, proporcionando privacidade aprimorada em cenários de aprendizado federado.
 
-## Datasets
+## Recursos
 
-1. FEMNIST
+- **Página Inicial Original:** [leaf.cmu.edu](https://leaf.cmu.edu)
+- **Artigo Original:** ["LEAF: A Benchmark for Federated Settings"](https://arxiv.org/abs/1812.01097)
+- **Biblioteca Utilizada:** [Pyfhel](https://github.com/ibarrond/Pyfhel)
 
-  * **Overview:** Image Dataset
-  * **Details:** 62 different classes (10 digits, 26 lowercase, 26 uppercase), images are 28 by 28 pixels (with option to make them all 128 by 128 pixels), 3500 users
-  * **Task:** Image Classification
+## Conjunto de Dados
 
-2. Sentiment140
+1. **FEMNIST**
+   - Imagens de 28x28 pixels (ajustáveis para 128x128 pixels)
+   - 62 classes (10 dígitos, 26 letras minúsculas, 26 letras maiúsculas)
+   - 3500 usuários
+   - Tarefa: Classificação de imagens
 
-  * **Overview:** Text Dataset of Tweets
-  * **Details** 660120 users
-  * **Task:** Sentiment Analysis
+2. **Sentiment140**
+   - Tweets com 660120 usuários
+   - Tarefa: Análise de sentimentos
 
-3. Shakespeare
+3. **Shakespeare**
+   - Diálogos das obras de Shakespeare
+   - 1129 usuários (reduzidos a 660 conforme escolha de comprimento de sequência)
+   - Tarefa: Predição do próximo caractere
 
-  * **Overview:** Text Dataset of Shakespeare Dialogues
-  * **Details:** 1129 users (reduced to 660 with our choice of sequence length. See [bug](https://github.com/TalwalkarLab/leaf/issues/19).)
-  * **Task:** Next-Character Prediction
+4. **Celeba**
+   - Baseado em [Large-scale CelebFaces Attributes Dataset](http://mmlab.ie.cuhk.edu.hk/projects/CelebA.html)
+   - 9343 usuários
+   - Tarefa: Classificação de imagens (Sorrindo vs. Não sorrindo)
 
-4. Celeba
+5. **Synthetic Dataset**
+   - Geração personalizada de dados sintéticos desafiadores para aprendizado federado
+   - Número de dispositivos, classes e dimensões personalizáveis
+   - Tarefa: Classificação
 
-  * **Overview:** Image Dataset based on the [Large-scale CelebFaces Attributes Dataset](http://mmlab.ie.cuhk.edu.hk/projects/CelebA.html)
-  * **Details:** 9343 users (we exclude celebrities with less than 5 images)
-  * **Task:** Image Classification (Smiling vs. Not smiling)
+6. **Reddit**
+   - Comentários preprocessados do Reddit (dados de dezembro de 2017)
+   - 1,660,820 usuários, 56,587,343 comentários
+   - Tarefa: Predição da próxima palavra
 
-5. Synthetic Dataset
+## Instalação e Requisitos
 
-  * **Overview:** We propose a process to generate synthetic, challenging federated datasets. The high-level goal is to create devices whose true models are device-dependant. To see a description of the whole generative process, please refer to the paper
-  * **Details:** The user can customize the number of devices, the number of classes and the number of dimensions, among others
-  * **Task:** Classification
+É necessário criar um ambiente virtual com Python 3.6:
 
-6. Reddit
+```bash
+python3.6 -m venv leaf_env
+source leaf_env/bin/activate
+pip install --upgrade pip
+```
 
-  * **Overview:** We preprocess the Reddit data released by [pushshift.io](https://files.pushshift.io/reddit/) corresponding to December 2017.
-  * **Details:** 1,660,820 users with a total of 56,587,343 comments. 
-  * **Task:** Next-word Prediction.
+Em seguida, instale as dependências necessárias:
 
-## Notes
+```bash
+pip install numpy==1.16.4 scipy==1.2.1 tensorflow==1.13.1 Pillow==6.2.1 matplotlib==3.0.3 jupyter==1.0.0 pandas==0.24.2 grpcio==1.16.1 protobuf==3.19.6 pyfhel
+```
 
-- Install the libraries listed in ```requirements.txt```
-    - I.e. with pip: run ```pip3 install -r requirements.txt```
-- Go to directory of respective dataset for instructions on generating data
-    - in MacOS check if ```wget``` is installed and working
-- ```models``` directory contains instructions on running baseline reference implementations
+- Certifique-se de que `wget` está instalado e funcionando (especialmente em macOS).
+- Para gerar os conjuntos de dados específicos, consulte as instruções dentro das respectivas pastas.
+- A pasta `models` contém instruções para executar as implementações básicas de referência com a adição da criptografia homomórfica.
