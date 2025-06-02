@@ -1,5 +1,8 @@
 import random
 import warnings
+from phe import paillier
+import numpy as np
+import json
 
 
 class Client:
@@ -10,6 +13,7 @@ class Client:
         self.group = group
         self.train_data = train_data
         self.eval_data = eval_data
+
 
     def train(self, num_epochs=1, batch_size=10, minibatch=None):
         """Trains on self.model using the client's train_data.
@@ -38,7 +42,77 @@ class Client:
             num_epochs = 1
             comp, update = self.model.train(data, num_epochs, num_data)
         num_train_samples = len(data['y'])
-        return comp, num_train_samples, update
+        
+
+        # --- CÁLCULO DEL PORCENTAJE DE PESOS DE LA ÚLTIMA CAPA ---
+        total_pesos = 0
+        pesos_ultima_capa = 0
+
+        for idx, arr in enumerate(update):
+            arr_np = np.array(arr)
+            n_pesos = arr_np.size
+            # print(f"Capa {idx}: {n_pesos} pesos, shape: {arr_np.shape}")
+            total_pesos += n_pesos
+            if idx == len(update) - 1:
+                pesos_ultima_capa = n_pesos
+
+        porcentaje = 100 * pesos_ultima_capa / total_pesos if total_pesos > 0 else 0
+
+        # print(f"Total pesos: {total_pesos}")
+        # print(f"Pesos última capa: {pesos_ultima_capa}")
+        # print(f"La última capa representa {porcentaje:.6f}% de todos los parámetros del modelo.")
+
+        # --- CIFRADO DE UPDATE ---
+
+        # Leer la llave pública Paillier desde archivo (formato JSON)
+        public_key_name = 'public_key.json'  # Cambia la ruta si es necesario
+        with open(public_key_name, 'r') as f:
+            pub_data = json.load(f)
+        public_key = paillier.PaillierPublicKey(pub_data['n'])
+
+        # Definir un factor de escala para convertir floats a enteros (Paillier cifra solo enteros)
+        scale = 1e6  # Aumenta o reduce para ajustar la precisión según lo que necesites
+
+        # Prepara las listas para almacenar los parámetros y las formas originales
+        enc_update = []  # Aquí se guardarán los parámetros (solo la última capa cifrada)
+        shapes = []      # Aquí se guardarán las formas originales de cada capa
+        num_layers = len(update)  # Número total de capas del modelo
+        # print("Número de capas del modelo:", num_layers)
+        # print("Tamano ultima capa:", len(update[-1]))
+        # print("valor ultima capa:", update[-1])
+
+        # Recorrer todas las capas del modelo
+        for idx, arr in enumerate(update):
+            arr_np = np.array(arr)     # Convierte a array numpy
+            shapes.append(arr_np.shape) # Guarda la forma original
+            if idx == num_layers - 1:  # Si es la última capa...
+                flat_arr = arr_np.flatten()  # Aplana el array
+                # Cifra cada elemento: multiplica por scale, convierte a int, y cifra
+                enc_arr = [public_key.encrypt(int(x * scale)) for x in flat_arr]
+                enc_update.append(enc_arr)   # Guarda la capa cifrada
+            else:
+                # Para el resto de capas, simplemente aplana y guarda los pesos en claro
+                enc_update.append(arr_np.flatten().tolist())
+
+        ## Sumar operaciones de cifrado
+        # Guardar el valor original
+        flops_entrenamiento = comp
+        # Ponderar el costo del cifrado (cada cifrado Paillier cuenta como 1000 FLOPs):
+        ops_cifrado = pesos_ultima_capa * 1000
+        comp += ops_cifrado
+
+        print(f"FLOPs entrenamiento: {flops_entrenamiento}, operaciones de cifrado: {ops_cifrado}, total: {comp}")
+
+
+
+
+        # Devuelve los resultados:
+        #   - comp: operaciones realizadas,
+        #   - num_train_samples: muestras usadas,
+        #   - (enc_update, shapes): parámetros del modelo (última capa cifrada) y sus formas.
+        return comp, num_train_samples, (enc_update, shapes)
+           
+        #return comp, num_train_samples, update
 
     def test(self, set_to_use='test'):
         """Tests self.model on self.test_data.

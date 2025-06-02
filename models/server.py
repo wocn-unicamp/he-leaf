@@ -1,5 +1,6 @@
 import numpy as np
-
+from phe import paillier
+import json
 from baseline_constants import BYTES_WRITTEN_KEY, BYTES_READ_KEY, LOCAL_COMPUTATIONS_KEY
 
 class Server:
@@ -68,14 +69,59 @@ class Server:
         return sys_metrics
 
     def update_model(self):
-        total_weight = 0.
-        base = [0] * len(self.updates[0][1])
-        for (client_samples, client_model) in self.updates:
-            total_weight += client_samples
-            for i, v in enumerate(client_model):
-                base[i] += (client_samples * v.astype(np.float64))
-        averaged_soln = [v / total_weight for v in base]
+        # total_weight = 0.
+        # base = [0] * len(self.updates[0][1])
+        # for (client_samples, client_model) in self.updates:
+        #     total_weight += client_samples
+        #     for i, v in enumerate(client_model):
+        #         base[i] += (client_samples * v.astype(np.float64))
+        # averaged_soln = [v / total_weight for v in base]
 
+        # self.model = averaged_soln
+        # self.updates = []
+
+         # ----- Cargar la llave privada Paillier -----
+        private_key_name = 'private_key.json'
+        with open(private_key_name, 'r') as f:
+            priv_data = json.load(f)
+        public_key = paillier.PaillierPublicKey(priv_data['public_key_n'])
+        private_key = paillier.PaillierPrivateKey(public_key, priv_data['p'], priv_data['q'])
+        scale = 1e6  # Debe ser el mismo usado en el cliente
+
+        total_weight = 0.
+        # `base` será una lista de arrays para acumular la suma ponderada de cada capa
+        # Toma la estructura del primer update para inicializar base
+        _, (first_update, shapes) = self.updates[0]
+        base = []
+        for idx, arr in enumerate(first_update):
+            # Si la capa es cifrada, crea array de ceros del tamaño adecuado
+            if idx == len(first_update) - 1:
+                base.append(np.zeros(len(arr)))
+            else:
+                base.append(np.zeros(len(arr)))
+
+        # ----------- Agregación ponderada cliente por cliente -----------
+        for (client_samples, (client_model, shapes)) in self.updates:
+            total_weight += client_samples
+            for idx, arr in enumerate(client_model):
+                if idx == len(client_model) - 1:
+                    # Es la última capa, hay que descifrar antes de sumar
+                    # Descifra cada peso y convierte a float
+                    dec_layer = [private_key.decrypt(w) / scale for w in arr]
+                    base[idx] += client_samples * np.array(dec_layer, dtype=np.float64)
+                else:
+                    # Capas en claro, solo suma
+                    base[idx] += client_samples * np.array(arr, dtype=np.float64)
+
+        # --------- Promediar y reconstruir las capas con su forma original -----------
+        averaged_soln = []
+        for idx, arr in enumerate(base):
+            arr_avg = arr / total_weight
+            shape = shapes[idx]
+            arr_avg = arr_avg.reshape(shape)
+            averaged_soln.append(arr_avg)
+
+        # Actualiza el modelo global con los nuevos pesos promediados
         self.model = averaged_soln
         self.updates = []
 
