@@ -171,3 +171,4 @@ class Server:
 
     def close_model(self):
         self.client_model.close()
+

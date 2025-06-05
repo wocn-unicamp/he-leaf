@@ -51,7 +51,7 @@ class Client:
         for idx, arr in enumerate(update):
             arr_np = np.array(arr)
             n_pesos = arr_np.size
-            # print(f"Capa {idx}: {n_pesos} pesos, shape: {arr_np.shape}")
+            print(f"Capa {idx}: {n_pesos} pesos, shape: {arr_np.shape}")
             total_pesos += n_pesos
             if idx == len(update) - 1:
                 pesos_ultima_capa = n_pesos
@@ -77,9 +77,9 @@ class Client:
         enc_update = []  # Aquí se guardarán los parámetros (solo la última capa cifrada)
         shapes = []      # Aquí se guardarán las formas originales de cada capa
         num_layers = len(update)  # Número total de capas del modelo
-        # print("Número de capas del modelo:", num_layers)
-        # print("Tamano ultima capa:", len(update[-1]))
-        # print("valor ultima capa:", update[-1])
+        print("Número de capas del modelo:", num_layers)
+        print("Tamano ultima capa:", len(update[-1]))
+        print("valor ultima capa:", update[-1])
 
         # Recorrer todas las capas del modelo
         for idx, arr in enumerate(update):
@@ -103,16 +103,13 @@ class Client:
 
         print(f"FLOPs entrenamiento: {flops_entrenamiento}, operaciones de cifrado: {ops_cifrado}, total: {comp}")
 
-
-
-
         # Devuelve los resultados:
         #   - comp: operaciones realizadas,
         #   - num_train_samples: muestras usadas,
         #   - (enc_update, shapes): parámetros del modelo (última capa cifrada) y sus formas.
         return comp, num_train_samples, (enc_update, shapes)
            
-        #return comp, num_train_samples, update
+        # return comp, num_train_samples, update
 
     def test(self, set_to_use='test'):
         """Tests self.model on self.test_data.
