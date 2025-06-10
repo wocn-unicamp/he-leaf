@@ -20,27 +20,66 @@ from utils.model_utils import read_data
 STAT_METRICS_PATH = 'metrics/stat_metrics.csv'
 SYS_METRICS_PATH = 'metrics/sys_metrics.csv'
 
+
+
 def main():
 
     args = parse_args()
 
     # Set the random seed if provided (affects client sampling, and batching)
+    # Semilla para el generador de números aleatorios estándar de Python
     random.seed(1 + args.seed)
+
+    # Semilla para el generador de números aleatorios de NumPy
     np.random.seed(12 + args.seed)
+
+    # Semilla para el generador de números aleatorios de TensorFlow (TF 1.x)
     tf.set_random_seed(123 + args.seed)
 
+
+    # Verifica que el archivo del modelo existe; si no, muestra un error y detiene el programa.
     model_path = '%s/%s.py' % (args.dataset, args.model)
+
+    # Verifica que el archivo del modelo existe; si no, muestra un error y detiene el programa.
     if not os.path.exists(model_path):
-        print('Please specify a valid dataset and a valid model.')
+        print('ERROR: Por favor, especifica un dataset y un modelo válidos. Archivo no encontrado:', model_path)
+        exit(1)  # Detiene la ejecución si el archivo no existe
+
+    # Para la importación dinámica, convierte la ruta al formato de módulo Python.
+    # Ejemplo: 'femnist/cnn.py' -> 'femnist.cnn'
     model_path = '%s.%s' % (args.dataset, args.model)
     
+    # -----------------------------------------------------------------------------
+    # Importa dinámicamente el módulo del modelo y obtiene la clase ClientModel.
+    # -----------------------------------------------------------------------------
+
+    # Imprime un encabezado indicando el modelo que se está utilizando.
     print('############################## %s ##############################' % model_path)
+
+    # Almacena el valor de HE en una variable para uso posterior.
+    he_percentage = args.he
+    print('>> Porcentaje de parámetros cifrados (HE): %.2f' % he_percentage)  # Mostrando el valor de HE
+
+    # Importa dinámicamente el módulo del modelo, por ejemplo: import femnist.cnn
     mod = importlib.import_module(model_path)
+
+    # Obtiene la clase ClientModel del módulo importado.
     ClientModel = getattr(mod, 'ClientModel')
 
-    tup = MAIN_PARAMS[args.dataset][args.t]
+    # -----------------------------------------------------------------------------
+    # Obtiene los parámetros principales de la simulación desde MAIN_PARAMS,
+    # usando el dataset y el tiempo de simulación seleccionados.
+    # Si el usuario especifica un valor por línea de comando, lo respeta; de lo contrario, usa el valor por defecto.
+    # -----------------------------------------------------------------------------
+    tup = MAIN_PARAMS[args.dataset][args.t]  # (num_rounds, eval_every, clients_per_round)
+
+    # Número total de rondas de entrenamiento federado
     num_rounds = args.num_rounds if args.num_rounds != -1 else tup[0]
+
+    # Frecuencia de evaluación (cada cuántas rondas se evalúa el modelo)
     eval_every = args.eval_every if args.eval_every != -1 else tup[1]
+
+    # Número de clientes seleccionados por ronda
     clients_per_round = args.clients_per_round if args.clients_per_round != -1 else tup[2]
 
     # Suppress tf warnings
@@ -70,6 +109,11 @@ def main():
     stat_writer_fn = get_stat_writer_function(client_ids, client_groups, client_num_samples, args)
     sys_writer_fn = get_sys_writer_function(args)
     print_stats(0, server, clients, client_num_samples, args, stat_writer_fn, args.use_val_set)
+
+    # Generate the mask for HE
+    porcentaje_a_cifrar = 0.01  # o el valor que prefieras
+    exito = server.generar_mascara(porcentaje_a_cifrar)
+
 
     # Simulate training
     for i in range(num_rounds):

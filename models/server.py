@@ -10,6 +10,8 @@ class Server:
         self.model = client_model.get_params()
         self.selected_clients = []
         self.updates = []
+    
+
 
     def select_clients(self, my_round, possible_clients, num_clients=20):
         """Selects num_clients clients randomly from possible_clients.
@@ -28,6 +30,30 @@ class Server:
         self.selected_clients = np.random.choice(possible_clients, num_clients, replace=False)
 
         return [(c.num_train_samples, c.num_test_samples) for c in self.selected_clients]
+
+
+
+    def generar_mascara(self, porcentaje=1, ruta_archivo='mascara.json'):
+
+        model_params = self.model
+        total_params = sum(param.size for param in model_params)
+        num_params_cifrados = int(total_params * porcentaje / 100)
+
+        mascara = np.zeros(total_params, dtype=bool)
+        mascara[:num_params_cifrados] = True
+        np.random.shuffle(mascara)
+
+        try:
+            with open(ruta_archivo, 'w') as f:
+                json.dump(mascara.tolist(), f)
+            # (Opcional) guarda la máscara como atributo para futuro uso
+            self.mascara = mascara
+            return True
+        except Exception as e:
+            print(f"Error al guardar la máscara: {e}")
+            return False
+
+
 
     def train_model(self, num_epochs=1, batch_size=10, minibatch=None, clients=None):
         """Trains self.model on given clients.
@@ -68,17 +94,19 @@ class Server:
 
         return sys_metrics
 
-    def update_model(self):
-        # total_weight = 0.
-        # base = [0] * len(self.updates[0][1])
-        # for (client_samples, client_model) in self.updates:
-        #     total_weight += client_samples
-        #     for i, v in enumerate(client_model):
-        #         base[i] += (client_samples * v.astype(np.float64))
-        # averaged_soln = [v / total_weight for v in base]
+    def update_model_without_he(self):
+        total_weight = 0.
+        base = [0] * len(self.updates[0][1])
+        for (client_samples, client_model) in self.updates:
+            total_weight += client_samples
+            for i, v in enumerate(client_model):
+                base[i] += (client_samples * v.astype(np.float64))
+        averaged_soln = [v / total_weight for v in base]
+       
+        self.model = averaged_soln
+        self.updates = []
 
-        # self.model = averaged_soln
-        # self.updates = []
+    def update_model_he_last_layer(self):
 
          # ----- Cargar la llave privada Paillier -----
         private_key_name = 'private_key.json'
@@ -86,7 +114,7 @@ class Server:
             priv_data = json.load(f)
         public_key = paillier.PaillierPublicKey(priv_data['public_key_n'])
         private_key = paillier.PaillierPrivateKey(public_key, priv_data['p'], priv_data['q'])
-        scale = 1e6  # Debe ser el mismo usado en el cliente
+        scale = 1e3  # Debe ser el mismo usado en el cliente
 
         total_weight = 0.
         # `base` será una lista de arrays para acumular la suma ponderada de cada capa
@@ -124,6 +152,61 @@ class Server:
         # Actualiza el modelo global con los nuevos pesos promediados
         self.model = averaged_soln
         self.updates = []
+
+    def update_model(self):
+        #Imprime que comienza la actualización del modelo con HE y el número de clientes
+        print('>> Comenzando la actualización del modelo con HE, número de clientes:', len(self.updates))
+
+
+        # ----- Cargar la llave privada Paillier -----
+        private_key_name = 'private_key.json'
+        with open(private_key_name, 'r') as f:
+            priv_data = json.load(f)
+        public_key = paillier.PaillierPublicKey(priv_data['public_key_n'])
+        private_key = paillier.PaillierPrivateKey(public_key, priv_data['p'], priv_data['q'])
+        scale = 1e2  # Debe ser el mismo usado en el cliente
+
+        # ----- Cargar la máscara -----
+        with open('mascara.json', 'r') as f:
+            mascara = np.array(json.load(f), dtype=bool)
+
+        # ----- Obtener shapes y cantidad de parámetros -----
+        _, (first_update, shapes) = self.updates[0]
+        total_params = mascara.size
+
+        # Inicializa la suma ponderada de cada parámetro (vector plano)
+        base = np.zeros(total_params, dtype=np.float64)
+        total_weight = 0.
+
+        # ----------- Agregación ponderada cliente por cliente -----------
+        for (client_samples, (client_model, shapes)) in self.updates:
+            total_weight += client_samples
+            flat_update = np.array(client_model, dtype=object)  # puede haber objetos Paillier y floats
+            suma_cliente = np.zeros(total_params, dtype=np.float64)
+
+            # Descifra solo donde mascara==True
+            for i in range(total_params):
+                if mascara[i]:
+                    suma_cliente[i] = private_key.decrypt(flat_update[i]) / scale
+                else:
+                    suma_cliente[i] = float(flat_update[i])
+            base += client_samples * suma_cliente
+
+        # Promediar
+        base /= total_weight
+
+        # --------- Reconstruir las capas con sus shapes -----------
+        averaged_soln = []
+        idx = 0
+        for shape in shapes:
+            size = np.prod(shape)
+            arr = base[idx:idx+size].reshape(shape)
+            averaged_soln.append(arr)
+            idx += size
+
+        self.model = averaged_soln
+        self.updates = []
+
 
     def test_model(self, clients_to_test, set_to_use='test'):
         """Tests self.model on given clients.

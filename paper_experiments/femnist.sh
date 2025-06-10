@@ -5,6 +5,7 @@ output_dir="${1:-./baseline}"
 split_seed="1549786796"
 sampling_seed="1549786595"
 num_rounds="100"
+he="0" # Porcentaje de parámetros con criptografía homomórfica (0 a 100) (0 means no HE)
 
 fedavg_lr="0.004"
 # declare -a fedavg_vals=( "3 1"
@@ -38,7 +39,14 @@ function run_fedavg() {
 	num_epochs="$2"
 
 	pushd models/
-		python main.py -dataset 'femnist' -model 'cnn' --num-rounds ${num_rounds} --clients-per-round ${clients_per_round} --num-epochs ${num_epochs} -lr ${fedavg_lr}
+		python main.py \
+				--dataset 'femnist' \
+				--model 'cnn' \
+				--num-rounds ${num_rounds} \
+				--clients-per-round ${clients_per_round} \
+				--num-epochs ${num_epochs} \
+				--lr ${fedavg_lr} \
+				--he ${he} 
 	popd
 	move_data ${output_dir} "fedavg_c_${clients_per_round}_e_${num_epochs}"
 }
@@ -48,7 +56,14 @@ function run_minibatch() {
 	minibatch_percentage="$2"
 
 	pushd models/
-		python main.py -dataset 'femnist' -model 'cnn' --minibatch ${minibatch_percentage} --num-rounds ${num_rounds} --clients-per-round ${clients_per_round} -lr ${minibatch_lr}
+		python main.py \
+				--dataset 'femnist' \
+				--model 'cnn' \
+				--minibatch ${minibatch_percentage} \
+				--num-rounds ${num_rounds} \
+				--clients-per-round ${clients_per_round} \
+				--lr ${minibatch_lr} \
+				--he ${he}
 	popd
 	move_data ${output_dir} "minibatch_c_${clients_per_round}_mb_${minibatch_percentage}"
 }
