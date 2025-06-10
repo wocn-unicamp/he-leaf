@@ -6,7 +6,6 @@ import os
 import sys
 import random
 import tensorflow as tf
-
 import metrics.writer as metrics_writer
 
 from baseline_constants import MAIN_PARAMS, MODEL_PARAMS
@@ -16,6 +15,8 @@ from model import ServerModel
 
 from utils.args import parse_args
 from utils.model_utils import read_data
+
+from tqdm import tqdm  # Importa tqdm para mostrar la barra de progreso
 
 STAT_METRICS_PATH = 'metrics/stat_metrics.csv'
 SYS_METRICS_PATH = 'metrics/sys_metrics.csv'
@@ -104,6 +105,7 @@ def main():
     client_ids, client_groups, client_num_samples = server.get_clients_info(clients)
     print('Clients in Total: %d' % len(clients))
 
+
     # Initial status
     print('--- Random Initialization ---')
     stat_writer_fn = get_stat_writer_function(client_ids, client_groups, client_num_samples, args)
@@ -122,6 +124,25 @@ def main():
         # Select clients to train this round
         server.select_clients(i, online(clients), num_clients=clients_per_round)
         c_ids, c_groups, c_num_samples = server.get_clients_info(server.selected_clients)
+
+
+        # Paso 1: Cada cliente seleccionado calcula su mapa de sensibilidad
+        print(f'--- Calculando mapas de sensibilidad para los {clients_per_round} clientes seleccionados en la ronda {i+1} ---')
+        sens_maps = []
+        for client in tqdm(server.selected_clients, desc=f"Mapas de sensibilidad (round {i+1})"):
+            # sample_size: número de ejemplos aleatorios locales usados para estimar la sensibilidad.
+            #              Valores típicos: 5-20. Menor = más rápido, pero menos preciso.
+            # param_subsample_rate: fracción de los parámetros del modelo a considerar (entre 0 y 1).
+            #                       Por ejemplo, 0.1 significa que solo se calcula la sensibilidad para el 10% de los parámetros.
+            #                       Menor = más rápido, pero menos preciso.
+            max_sample_size = len(client.train_data['y'])
+            sens_map = client.calcular_mapa_sensibilidad(
+                sample_size=2,            # Usa 10 ejemplos de entrenamiento locales para el cálculo de sensibilidad,  max=max_sample_size
+                param_subsample_rate=0.05   # Calcula la sensibilidad solo para el 10% de los parámetros del modelo, max = 1.0
+            )
+            sens_maps.append(sens_map)
+
+
 
         # Simulate server model training on selected clients' data
         sys_metrics = server.train_model(num_epochs=args.num_epochs, batch_size=args.batch_size, minibatch=args.minibatch)

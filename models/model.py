@@ -124,6 +124,29 @@ class Model(ABC):
         acc = float(tot_acc) / x_vecs.shape[0]
         return {ACCURACY_KEY: acc, 'loss': loss}
 
+    # Evaluate loss for a batch of data
+    # Implementado para el mapa de sensibilidad de los clientes
+    def evaluate_loss(self, X, y):
+        """
+        Evalúa el valor de la función de pérdida para un batch dado.
+        """
+        with self.graph.as_default():
+            feed_dict = {
+                self.features: X,
+                self.labels: y,
+            }
+        return self.sess.run(self.loss, feed_dict=feed_dict)
+
+    # Evaluate loss for each sample in a batch
+    # Implementado para el mapa de sensibilidad por batches de los clientes
+    def evaluate_loss_per_sample(self, X, y):
+        with self.graph.as_default():
+            feed_dict = {
+                self.features: X,
+                self.labels: y,
+            }
+        return self.sess.run(self.loss_per_sample, feed_dict=feed_dict)
+
     def close(self):
         self.sess.close()
 
