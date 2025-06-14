@@ -218,7 +218,7 @@ class Client:
         num_train_samples = len(data['y'])
 
         # --- CIFRADO SEGÚN MÁSCARA ---
-        print("Cargando máscara de parámetros a cifrar...")
+        print("Cargando máscara de parámetros a cifrar ......")
         with open('mascara.json', 'r') as f:
             mascara = np.array(json.load(f), dtype=bool)
 
