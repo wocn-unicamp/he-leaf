@@ -5,7 +5,7 @@ output_dir="${1:-./baseline}"
 split_seed="1549786796"
 sampling_seed="1549786595"
 num_rounds="100"
-he="0" # Porcentaje de parámetros con criptografía homomórfica (0 a 100) (0 means no HE)
+he="0.01" # Porcentaje de parámetros con criptografía homomórfica (0 a 100) (0 means no HE)
 
 fedavg_lr="0.004"
 # declare -a fedavg_vals=( "3 1"

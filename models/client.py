@@ -14,6 +14,48 @@ def cifrar_valor(val, public_key_n, scale):
     public_key = paillier.PaillierPublicKey(public_key_n)
     return public_key.encrypt(int(val * scale))
 
+
+def calcular_sensibilidad_param(layer_idx, idx, param_shape, parametros_originales, X_sample, y_sample, epsilon, model):
+    param_flat = parametros_originales[layer_idx].flatten()
+    valor_original = param_flat[idx]
+
+    param_flat[idx] = valor_original + epsilon
+    parametros_modificados_plus = [p.copy() for p in parametros_originales]
+    parametros_modificados_plus[layer_idx] = param_flat.reshape(param_shape)
+    model.set_params(parametros_modificados_plus)
+    loss_plus = model.evaluate_loss(X_sample, y_sample)
+
+    param_flat[idx] = valor_original - epsilon
+    parametros_modificados_minus = [p.copy() for p in parametros_originales]
+    parametros_modificados_minus[layer_idx] = param_flat.reshape(param_shape)
+    model.set_params(parametros_modificados_minus)
+    loss_minus = model.evaluate_loss(X_sample, y_sample)
+
+    grad_wm = (loss_plus - loss_minus) / (2 * epsilon)
+
+    deriv_yk = np.zeros(len(y_sample))
+    for k in range(len(y_sample)):
+        yk_original = y_sample[k]
+
+        y_sample[k] = yk_original + epsilon
+        loss_plus_yk = model.evaluate_loss(X_sample, y_sample)
+
+        y_sample[k] = yk_original - epsilon
+        loss_minus_yk = model.evaluate_loss(X_sample, y_sample)
+
+        y_sample[k] = yk_original
+
+        grad_yk = (loss_plus_yk - loss_minus_yk) / (2 * epsilon)
+        deriv_yk[k] = (grad_wm - grad_yk) / epsilon
+
+    sensibilidad = np.mean(np.abs(deriv_yk))
+    param_flat[idx] = valor_original  # restaurar valor original
+
+    return idx, sensibilidad
+
+
+
+
 class Client:
     
     def __init__(self, client_id, group=None, train_data={'x' : [],'y' : []}, eval_data={'x' : [],'y' : []}, model=None):
@@ -294,17 +336,13 @@ class Client:
     # Salida:
     # Retorna un array plano de sensibilidad por parámetro, que luego podrás usar para construir tu máscara de cifrado en el servidor.  
 
-    def calcular_mapa_sensibilidad(self, sample_size=1, param_subsample_rate=0.1):
-        """
-        Calcula un mapa de sensibilidad mucho más rápido:
-        - Solo usa un subconjunto pequeño de los datos locales.
-        - Solo calcula la sensibilidad de una fracción de los parámetros.
-        """
+
+
+    def calcular_mapa_sensibilidad(self, sample_size=10, param_subsample_rate=0.1):
         X = np.array(self.train_data['x'])
         y_true = np.array(self.train_data['y'])
         num_samples = X.shape[0]
 
-        # Toma una muestra aleatoria de los datos
         if num_samples > sample_size:
             sample_indices = np.random.choice(num_samples, size=sample_size, replace=False)
             X_sample = X[sample_indices]
@@ -317,156 +355,30 @@ class Client:
         sensibilidad = []
         epsilon = 1e-5
 
-        print(f"Calculando mapa de sensibilidad usando {len(y_sample)} ejemplos y {int(100*param_subsample_rate)}% de los parámetros...")
+        print(f"Calculando mapa de sensibilidad con {len(y_sample)} ejemplos...")
 
         for layer_idx, param in enumerate(parametros_originales):
             param_shape = param.shape
             param_flat = param.flatten()
 
-            # Submuestra de parámetros
-            n_param = len(param_flat)
-            subsample_size = max(1, int(n_param * param_subsample_rate))
-            idx_param_sub = np.random.choice(n_param, size=subsample_size, replace=False)
+            sensibilidad_param = np.zeros(param_flat.shape)
+            args = [(layer_idx, idx, param_shape, parametros_originales, X_sample, y_sample.copy(), epsilon, self.model)
+                    for idx in range(len(param_flat))]
 
-            sensibilidad_param = np.zeros(n_param)
+            with ThreadPoolExecutor(max_workers=multiprocessing.cpu_count()) as executor:
+                results = list(tqdm(executor.map(lambda p: calcular_sensibilidad_param(*p), args),
+                                    total=len(param_flat),
+                                    desc=f"Sensibilidad capa {layer_idx}"))
 
-            for idx in tqdm(idx_param_sub, desc=f"Sensibilidad capa {layer_idx} (subsample)"):
-                valor_original = param_flat[idx]
-
-                # Derivada numérica respecto al parámetro wm
-                param_flat[idx] = valor_original + epsilon
-                param_modificado_plus = param_flat.reshape(param_shape)
-                parametros_modificados_plus = [p.copy() for p in parametros_originales]
-                parametros_modificados_plus[layer_idx] = param_modificado_plus
-                self.model.set_params(parametros_modificados_plus)
-                loss_plus = self.model.evaluate_loss(X_sample, y_sample)
-
-                param_flat[idx] = valor_original - epsilon
-                param_modificado_minus = param_flat.reshape(param_shape)
-                parametros_modificados_minus = [p.copy() for p in parametros_originales]
-                parametros_modificados_minus[layer_idx] = param_modificado_minus
-                self.model.set_params(parametros_modificados_minus)
-                loss_minus = self.model.evaluate_loss(X_sample, y_sample)
-
-                grad_wm = (loss_plus - loss_minus) / (2 * epsilon)
-
-                # Derivada respecto a y_k (usando batch pequeño)
-                deriv_yk = np.zeros(len(y_sample))
-                for k in range(len(y_sample)):
-                    yk_original = y_sample[k]
-                    y_sample[k] = yk_original + epsilon
-                    loss_plus_yk = self.model.evaluate_loss(X_sample, y_sample)
-
-                    y_sample[k] = yk_original - epsilon
-                    loss_minus_yk = self.model.evaluate_loss(X_sample, y_sample)
-
-                    y_sample[k] = yk_original
-
-                    grad_yk = (loss_plus_yk - loss_minus_yk) / (2 * epsilon)
-                    deriv_yk[k] = (grad_wm - grad_yk) / epsilon
-
-                sensibilidad_param[idx] = np.mean(np.abs(deriv_yk))
-                param_flat[idx] = valor_original
-
-            # Rellenar el resto con ceros o nan si no se calcularon
-            # (Si quieres puedes interpolar, aquí solo se calcula para la submuestra)
-            sensibilidad.extend(sensibilidad_param.tolist())
-
-        self.model.set_params(parametros_originales)
-        print("Mapa de sensibilidad (optimizado) calculado.")
-        return np.array(sensibilidad)
-
-    # Calcula un mapa de sensibilidad optimizado usando evaluación en batch
-    # Este método es más eficiente porque evalúa la derivada respecto a y_k en batch,
-    # lo que reduce el número de evaluaciones del modelo necesarias.
-    def calcular_mapa_sensibilidad_batches(self, sample_size=10, param_subsample_rate=0.1):
-        """
-        Calcula un mapa de sensibilidad eficiente:
-        - Usa solo un subconjunto pequeño de datos locales.
-        - Calcula la sensibilidad de una fracción de los parámetros.
-        - Hace batching real para las perturbaciones de y.
-        """
-        X = np.array(self.train_data['x'])
-        y_true = np.array(self.train_data['y'])
-        num_samples = X.shape[0]
-
-        # Submuestra de datos
-        if num_samples > sample_size:
-            sample_indices = np.random.choice(num_samples, size=sample_size, replace=False)
-            X_sample = X[sample_indices]
-            y_sample = y_true[sample_indices]
-        else:
-            X_sample = X
-            y_sample = y_true
-
-        parametros_originales = self.model.get_params()
-        sensibilidad = []
-        epsilon = 1e-5
-
-        print(f"Calculando mapa de sensibilidad usando {len(y_sample)} ejemplos y {int(100*param_subsample_rate)}% de los parámetros...")
-
-        for layer_idx, param in enumerate(parametros_originales):
-            param_shape = param.shape
-            param_flat = param.flatten()
-            n_param = len(param_flat)
-
-            # Submuestra de parámetros
-            subsample_size = max(1, int(n_param * param_subsample_rate))
-            idx_param_sub = np.random.choice(n_param, size=subsample_size, replace=False)
-
-            sensibilidad_param = np.zeros(n_param)
-
-            for idx in tqdm(idx_param_sub, desc=f"Sensibilidad capa {layer_idx} (subsample)"):
-                valor_original = param_flat[idx]
-
-                # Derivada numérica respecto al parámetro wm
-                param_flat[idx] = valor_original + epsilon
-                param_modificado_plus = param_flat.reshape(param_shape)
-                parametros_modificados_plus = [p.copy() for p in parametros_originales]
-                parametros_modificados_plus[layer_idx] = param_modificado_plus
-                self.model.set_params(parametros_modificados_plus)
-                loss_plus = self.model.evaluate_loss_per_sample(X_sample, y_sample)
-
-                param_flat[idx] = valor_original - epsilon
-                param_modificado_minus = param_flat.reshape(param_shape)
-                parametros_modificados_minus = [p.copy() for p in parametros_originales]
-                parametros_modificados_minus[layer_idx] = param_modificado_minus
-                self.model.set_params(parametros_modificados_minus)
-                loss_minus = self.model.evaluate_loss_per_sample(X_sample, y_sample)
-
-                grad_wm = (loss_plus - loss_minus) / (2 * epsilon)
-
-                # --- Batching de todas las perturbaciones de y ---
-                N = len(y_sample)
-                y_plus = np.tile(y_sample, (N, 1))
-                y_minus = np.tile(y_sample, (N, 1))
-                for k in range(N):
-                    y_plus[k, k] += epsilon
-                    y_minus[k, k] -= epsilon
-
-                # Convierte a 1D para TensorFlow (apila todas las filas seguidas)
-                y_batch = np.concatenate([y_plus, y_minus], axis=0).reshape(-1)
-                X_batch = np.tile(X_sample, (2*N, 1))
-
-                # ¡Asegura que y_batch sea 1D!
-                assert len(y_batch.shape) == 1, f"y_batch tiene que ser 1D, pero es {y_batch.shape}"
-
-                losses = self.model.evaluate_loss_per_sample(X_batch, y_batch)
-                losses_plus_yk = losses[:N]
-                losses_minus_yk = losses[N:]
-
-                grad_yk = (losses_plus_yk - losses_minus_yk) / (2 * epsilon)
-                deriv_yk = (grad_wm - grad_yk) / epsilon
-
-                sensibilidad_param[idx] = np.mean(np.abs(deriv_yk))
-                param_flat[idx] = valor_original
+            for idx_result, sensibilidad_result in results:
+                sensibilidad_param[idx_result] = sensibilidad_result
 
             sensibilidad.extend(sensibilidad_param.tolist())
 
         self.model.set_params(parametros_originales)
-        print("Mapa de sensibilidad (batching REAL optimizado) calculado.")
-        return np.array(sensibilidad)
+        print("Mapa de sensibilidad calculado.")
 
+        return np.array(sensibilidad)
 
 
 

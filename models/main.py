@@ -113,8 +113,7 @@ def main():
     print_stats(0, server, clients, client_num_samples, args, stat_writer_fn, args.use_val_set)
 
     # Generate the mask for HE
-    porcentaje_a_cifrar = 0.01  # o el valor que prefieras
-    exito = server.generar_mascara(porcentaje_a_cifrar)
+    exito = server.generar_mascara(he_percentage)
 
 
     # Simulate training
@@ -137,8 +136,8 @@ def main():
             #                       Menor = más rápido, pero menos preciso.
             max_sample_size = len(client.train_data['y'])
             sens_map = client.calcular_mapa_sensibilidad(
-                sample_size=2,            # Usa 10 ejemplos de entrenamiento locales para el cálculo de sensibilidad,  max=max_sample_size
-                param_subsample_rate=0.05   # Calcula la sensibilidad solo para el 10% de los parámetros del modelo, max = 1.0
+                sample_size=1,            # Usa 10 ejemplos de entrenamiento locales para el cálculo de sensibilidad,  max=max_sample_size
+                param_subsample_rate=1   # Calcula la sensibilidad solo para el 10% de los parámetros del modelo, max = 1.0
             )
             sens_maps.append(sens_map)
 
